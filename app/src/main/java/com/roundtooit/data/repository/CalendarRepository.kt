@@ -22,7 +22,7 @@ class CalendarRepository @Inject constructor(
         cal.add(Calendar.DAY_OF_YEAR, 1)
         val endOfDay = cal.timeInMillis
 
-        return cachedEventDao.getTodayEvents(startOfDay, endOfDay)
+        return cachedEventDao.getTodayEvents(startOfDay, endOfDay, System.currentTimeMillis())
     }
 
     fun getNextFutureEvents(): Flow<List<CachedEventEntity>> {

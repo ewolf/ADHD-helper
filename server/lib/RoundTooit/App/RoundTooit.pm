@@ -33,6 +33,14 @@ our %METHODS = (
     markEmailDone => { auth => 1 },
     getDoneEmails => { auth => 1 },
     sync          => { auth => 1 },
+
+    # Admin methods
+    adminGetStats       => { admin_only => 1 },
+    adminListUsers      => { admin_only => 1 },
+    adminGetUserData    => { admin_only => 1 },
+    adminClearDoneEmails => { admin_only => 1 },
+    adminDeleteUser     => { admin_only => 1 },
+    adminSetUserLocked  => { admin_only => 1 },
 );
 
 our %FIELD_ACCESS = (
@@ -440,6 +448,157 @@ sub sync {
         prefs        => $prefs,
         data_version => $current_version,
     };
+}
+
+# ---------------------------------------------------------------
+# Admin methods
+# ---------------------------------------------------------------
+
+sub adminGetStats {
+    my ($self, $args, $session) = @_;
+
+    my $task_queues = $self->get_task_queues // {};
+    my $note_lists  = $self->get_note_lists // {};
+    my $done_emails = $self->get_done_emails // {};
+
+    my $total_tasks = 0;
+    my $total_notes = 0;
+    my $total_done_emails = 0;
+
+    my $all_users = $self->store->fetch_root->get_users // {};
+    my $user_count = scalar(keys %$all_users);
+
+    for my $uid (keys %$task_queues) {
+        my $q = $task_queues->{$uid};
+        $total_tasks += scalar(@$q) if $q;
+    }
+    for my $uid (keys %$note_lists) {
+        my $n = $note_lists->{$uid};
+        $total_notes += scalar(@$n) if $n;
+    }
+    for my $uid (keys %$done_emails) {
+        my $d = $done_emails->{$uid};
+        $total_done_emails += scalar(keys %$d) if $d;
+    }
+
+    return 1, {
+        total_tasks       => $total_tasks,
+        total_notes       => $total_notes,
+        total_done_emails => $total_done_emails,
+        data_version      => $self->get_data_version // 0,
+        user_count        => $user_count,
+    };
+}
+
+sub adminListUsers {
+    my ($self, $args, $session) = @_;
+
+    my $all_users = $self->store->fetch_root->get_users // {};
+    my $task_queues = $self->get_task_queues // {};
+    my $note_lists  = $self->get_note_lists // {};
+    my $done_emails = $self->get_done_emails // {};
+
+    my @users;
+    for my $handle (sort keys %$all_users) {
+        my $user = $all_users->{$handle};
+        next unless $user;
+        my $uid = $user->id;
+        my $tasks = $task_queues->{$uid};
+        my $notes = $note_lists->{$uid};
+        my $done  = $done_emails->{$uid};
+        push @users, {
+            id          => $uid,
+            handle      => $user->get_handle,
+            is_admin    => $user->get_is_admin ? 1 : 0,
+            locked      => $user->get_status  ? 1 : 0,
+            task_count  => $tasks ? scalar(@$tasks) : 0,
+            note_count  => $notes ? scalar(@$notes) : 0,
+            done_emails => $done ? scalar(keys %$done) : 0,
+            last_login  => $user->get_last_login // '',
+            created     => $user->get_created // '',
+        };
+    }
+
+    return 1, { users => \@users };
+}
+
+sub adminSetUserLocked {
+    my ($self, $args, $session) = @_;
+    my $uid    = $args->{user_id};
+    my $locked = $args->{locked} ? 1 : 0;
+    return 0, "user_id is required" unless $uid;
+
+    my $user = $self->store->fetch($uid);
+    return 0, "user not found" unless $user;
+
+    # Don't let an admin lock their own account.
+    my $viewer = $session && $session->get_user;
+    if ($viewer && $viewer->id eq $user->id && $locked) {
+        return 0, "cannot lock your own account";
+    }
+
+    $user->set_status($locked);
+    $self->store->save;
+
+    return 1, { user_id => $uid, locked => $locked };
+}
+
+sub adminGetUserData {
+    my ($self, $args, $session) = @_;
+    my $uid = $args->{user_id};
+    return 0, "user_id is required" unless $uid;
+
+    my $store = $self->store;
+    my $user = $store->fetch($uid);
+    return 0, "user not found" unless $user;
+
+    my $tasks = $self->get_task_queues->{$uid} // [];
+    my $notes = $self->get_note_lists->{$uid} // [];
+    my $done  = $self->get_done_emails->{$uid} // {};
+    my $prefs_hash = $self->get_user_prefs;
+    my $prefs = $prefs_hash->{$uid};
+
+    return 1, {
+        handle      => $user->get_handle,
+        tasks       => [ @$tasks ],
+        notes       => [ reverse @$notes ],
+        done_emails => [ keys %$done ],
+        prefs       => $prefs,
+    };
+}
+
+sub adminClearDoneEmails {
+    my ($self, $args, $session) = @_;
+    my $uid = $args->{user_id};
+
+    if ($uid) {
+        my $done = $self->get_done_emails;
+        if ($done->{$uid}) {
+            %{$done->{$uid}} = ();
+        }
+    } else {
+        my $done = $self->get_done_emails;
+        for my $uid (keys %$done) {
+            %{$done->{$uid}} = ();
+        }
+    }
+
+    $self->_bump_version;
+    return 1, { cleared => 1 };
+}
+
+sub adminDeleteUser {
+    my ($self, $args, $session) = @_;
+    my $uid = $args->{user_id};
+    return 0, "user_id is required" unless $uid;
+
+    delete $self->get_task_queues->{$uid};
+    delete $self->get_note_lists->{$uid};
+    delete $self->get_done_emails->{$uid};
+    delete $self->get_user_prefs->{$uid};
+
+    $self->_bump_version;
+    return 1, { deleted => 1 };
 }
 
 1;

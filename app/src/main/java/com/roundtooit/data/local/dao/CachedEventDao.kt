@@ -6,8 +6,8 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CachedEventDao {
-    @Query("SELECT * FROM cached_events WHERE startTime >= :startOfDay AND startTime < :endOfDay ORDER BY startTime ASC")
-    fun getTodayEvents(startOfDay: Long, endOfDay: Long): Flow<List<CachedEventEntity>>
+    @Query("SELECT * FROM cached_events WHERE startTime >= :startOfDay AND startTime < :endOfDay AND endTime > :now ORDER BY startTime ASC")
+    fun getTodayEvents(startOfDay: Long, endOfDay: Long, now: Long): Flow<List<CachedEventEntity>>
 
     @Query("SELECT * FROM cached_events WHERE startTime >= :afterTime ORDER BY startTime ASC LIMIT 3")
     fun getNextFutureEvents(afterTime: Long): Flow<List<CachedEventEntity>>

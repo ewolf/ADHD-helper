@@ -361,6 +361,9 @@
     <a slot="nav" class="() => $view === 'dashboard' ? 'active' : ''" @click="goTo('dashboard')">Dashboard</a>
     <a slot="nav" class="() => $view === 'tasks' ? 'active' : ''" @click="goTo('tasks')">Tasks</a>
     <a slot="nav" class="() => $view === 'notes' ? 'active' : ''" @click="goTo('notes')">Notes</a>
+    <if condition="() => store.get('user') && store.get('user').is_admin">
+      <a slot="nav" href="/admin/">Admin</a>
+    </if>
     <a slot="nav" @click="doLogout()">Logout</a>
 
     <if condition="() => !$googleConnected">

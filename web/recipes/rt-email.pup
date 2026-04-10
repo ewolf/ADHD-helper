@@ -13,10 +13,11 @@
       if (!app) return;
       try {
         await app.markEmailDone({ gmail_id: email.id });
-        // Remove from displayed list
+        // Remove from displayed list and local cache
         var list = store.get('emailList') || [];
         var updated = list.filter(function(em) { return em.id !== email.id; });
         store.set('emailList', updated);
+        _rtSetEmailCache(updated);
       } catch (err) {
         $error = err.message;
       }

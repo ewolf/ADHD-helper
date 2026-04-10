@@ -63,6 +63,23 @@ async function _rtDoGoogleLoad(token) {
     console.log('[RT] _rtDoGoogleLoad with token');
 
     store.set('calLoading', true);
+    store.set('emailLoading', true);
+
+    // Run calendar and email loads in parallel
+    var calendarPromise = _rtLoadCalendarData(token);
+    var emailPromise = _rtLoadEmailData(token);
+
+    calendarPromise.then(function() {
+        store.set('calLoading', false);
+    });
+    emailPromise.then(function() {
+        store.set('emailLoading', false);
+    });
+
+    await Promise.all([calendarPromise, emailPromise]);
+}
+
+async function _rtLoadCalendarData(token) {
     try {
         var today = await _rtLoadTodayEvents(token);
         console.log('[RT] today events:', today.length);
@@ -77,9 +94,9 @@ async function _rtDoGoogleLoad(token) {
     } catch (err) {
         console.error('[RT] upcoming error:', err);
     }
-    store.set('calLoading', false);
+}
 
-    store.set('emailLoading', true);
+async function _rtLoadEmailData(token) {
     try {
         var emails = await _rtLoadEmails(token);
         console.log('[RT] emails:', emails.length);
@@ -106,7 +123,6 @@ async function _rtDoGoogleLoad(token) {
     } catch (err) {
         console.error('[RT] email error:', err);
     }
-    store.set('emailLoading', false);
 }
 
 async function _rtLoadTodayEvents(token) {
@@ -125,11 +141,12 @@ async function _rtLoadTodayEvents(token) {
         } catch (e) {}
     }
 
-    // Dedupe by event ID and sort by start time
+    // Dedupe, filter out ended events, sort by start time
+    var now = Date.now();
     var seen = {};
     var unique = [];
     for (var j = 0; j < allEvents.length; j++) {
-        if (!seen[allEvents[j].id]) {
+        if (!seen[allEvents[j].id] && allEvents[j].endTime > now) {
             seen[allEvents[j].id] = true;
             unique.push(allEvents[j]);
         }

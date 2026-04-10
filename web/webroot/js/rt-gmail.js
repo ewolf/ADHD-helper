@@ -1,18 +1,59 @@
 /**
  * Round Tooit Gmail helper
  * Fetches all emails from known senders (people user has emailed)
+ * Caches results in localStorage; only fetches new emails on subsequent loads
  */
-async function _rtLoadEmails(token) {
+
+// Cache keys
+var _RT_EMAIL_CACHE_KEY = 'rt_email_cache';
+var _RT_EMAIL_LAST_CHECK_KEY = 'rt_email_last_check';
+var _RT_EMAIL_SENDERS_KEY = 'rt_email_known_senders';
+
+function _rtGetEmailCache() {
+    try {
+        var raw = localStorage.getItem(_RT_EMAIL_CACHE_KEY);
+        return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+}
+
+function _rtSetEmailCache(emails) {
+    try {
+        localStorage.setItem(_RT_EMAIL_CACHE_KEY, JSON.stringify(emails));
+    } catch (e) {}
+}
+
+function _rtGetLastEmailCheck() {
+    var ts = localStorage.getItem(_RT_EMAIL_LAST_CHECK_KEY);
+    return ts ? parseInt(ts) : 0;
+}
+
+function _rtSetLastEmailCheck(ts) {
+    localStorage.setItem(_RT_EMAIL_LAST_CHECK_KEY, '' + ts);
+}
+
+function _rtGetCachedSenders() {
+    try {
+        var raw = localStorage.getItem(_RT_EMAIL_SENDERS_KEY);
+        return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+}
+
+function _rtSetCachedSenders(senders) {
+    try {
+        localStorage.setItem(_RT_EMAIL_SENDERS_KEY, JSON.stringify(senders));
+    } catch (e) {}
+}
+
+async function _rtBuildKnownSenders(token) {
     var hdrs = { Authorization: 'Bearer ' + token };
     var emailRegex = /[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/g;
+    var senders = {};
 
-    // Build known senders from Sent folder
     var sentResp = await fetch(
         'https://www.googleapis.com/gmail/v1/users/me/messages?labelIds=SENT&maxResults=200',
         { headers: hdrs }
     );
     var sentData = await sentResp.json();
-    var senders = {};
 
     var msgIds = (sentData.messages || []).slice(0, 100);
     for (var i = 0; i < msgIds.length; i++) {
@@ -31,19 +72,23 @@ async function _rtLoadEmails(token) {
             }
         } catch (e) {}
     }
+    return senders;
+}
 
-    // Build search query for all known senders
+async function _rtFetchEmailsSince(token, senders, sinceTimestamp) {
+    var hdrs = { Authorization: 'Bearer ' + token };
     var senderList = Object.keys(senders);
     if (senderList.length === 0) return [];
 
-    // Query inbox for emails from known senders (all, not just unread)
-    // Gmail search: from:(addr1 OR addr2 OR ...)
-    // Batch in groups to avoid query length limits
     var allFiltered = [];
     var batchSize = 20;
+
+    // Gmail "after:" uses epoch seconds
+    var afterQuery = sinceTimestamp > 0 ? ' after:' + Math.floor(sinceTimestamp / 1000) : '';
+
     for (var b = 0; b < senderList.length; b += batchSize) {
         var batch = senderList.slice(b, b + batchSize);
-        var fromQuery = 'in:inbox from:(' + batch.join(' OR ') + ')';
+        var fromQuery = 'in:inbox from:(' + batch.join(' OR ') + ')' + afterQuery;
         try {
             var inboxResp = await fetch(
                 'https://www.googleapis.com/gmail/v1/users/me/messages?q=' + encodeURIComponent(fromQuery) + '&maxResults=50',
@@ -62,11 +107,9 @@ async function _rtLoadEmails(token) {
                     var imHeaders = (imData.payload && imData.payload.headers) || [];
                     var fromH = '';
                     var subjectH = '(No subject)';
-                    var dateH = '';
                     for (var h = 0; h < imHeaders.length; h++) {
                         if (imHeaders[h].name === 'From') fromH = imHeaders[h].value;
                         if (imHeaders[h].name === 'Subject') subjectH = imHeaders[h].value;
-                        if (imHeaders[h].name === 'Date') dateH = imHeaders[h].value;
                     }
                     var fromMatch = fromH.match(/[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}/);
                     var fromEmail = fromMatch ? fromMatch[0].toLowerCase() : '';
@@ -90,10 +133,58 @@ async function _rtLoadEmails(token) {
         } catch (e) {}
     }
 
-    // Sort by date descending
-    allFiltered.sort(function(a, b) { return b.receivedAt - a.receivedAt; });
+    return allFiltered;
+}
 
-    // Ensure ADHD label and apply to these messages
+async function _rtLoadEmails(token) {
+    var lastCheck = _rtGetLastEmailCheck();
+    var cachedEmails = _rtGetEmailCache();
+    var now = Date.now();
+
+    console.log('[RT-EMAIL] last check:', lastCheck ? new Date(lastCheck).toLocaleString() : 'never', 'cached:', cachedEmails.length);
+
+    // Use cached senders if available, otherwise build fresh
+    var senders = _rtGetCachedSenders();
+    if (!senders) {
+        console.log('[RT-EMAIL] building known senders list');
+        senders = await _rtBuildKnownSenders(token);
+        _rtSetCachedSenders(senders);
+    }
+
+    // Fetch only new emails since last check
+    var newEmails = await _rtFetchEmailsSince(token, senders, lastCheck);
+    console.log('[RT-EMAIL] new emails since last check:', newEmails.length);
+
+    // Merge: add new emails, dedupe by ID
+    var emailMap = {};
+    for (var i = 0; i < cachedEmails.length; i++) {
+        emailMap[cachedEmails[i].id] = cachedEmails[i];
+    }
+    for (var j = 0; j < newEmails.length; j++) {
+        emailMap[newEmails[j].id] = newEmails[j];
+    }
+
+    // Convert back to sorted array
+    var merged = [];
+    for (var id in emailMap) {
+        merged.push(emailMap[id]);
+    }
+    merged.sort(function(a, b) { return b.receivedAt - a.receivedAt; });
+
+    // Update cache and timestamp
+    _rtSetEmailCache(merged);
+    _rtSetLastEmailCheck(now);
+
+    // Ensure ADHD label for new emails only
+    if (newEmails.length > 0) {
+        _rtApplyAdhdLabel(token, newEmails);
+    }
+
+    return merged;
+}
+
+async function _rtApplyAdhdLabel(token, emails) {
+    var hdrs = { Authorization: 'Bearer ' + token };
     try {
         var labelId = null;
         var labelsResp = await fetch('https://www.googleapis.com/gmail/v1/users/me/labels', { headers: hdrs });
@@ -111,10 +202,10 @@ async function _rtLoadEmails(token) {
             labelId = created.id;
         }
         if (labelId) {
-            for (var m = 0; m < allFiltered.length; m++) {
+            for (var m = 0; m < emails.length; m++) {
                 try {
                     await fetch(
-                        'https://www.googleapis.com/gmail/v1/users/me/messages/' + allFiltered[m].id + '/modify',
+                        'https://www.googleapis.com/gmail/v1/users/me/messages/' + emails[m].id + '/modify',
                         {
                             method: 'POST',
                             headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -125,6 +216,4 @@ async function _rtLoadEmails(token) {
             }
         }
     } catch (e) {}
-
-    return allFiltered;
 }
