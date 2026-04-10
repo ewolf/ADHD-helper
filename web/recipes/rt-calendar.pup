@@ -1,0 +1,209 @@
+<script>
+{
+  title: 'Calendar',
+  vars: {
+    reminders: []
+  },
+  lifecycle: {
+    onMount: () => {
+      startReminderCheck();
+    }
+  },
+  methods: {
+    openInGoogleCalendar: (event) => {
+      window.open('https://calendar.google.com/calendar/event?eid=' + btoa(event.id + ' ' + (event.calendarId || 'primary')), '_blank');
+    },
+    startReminderCheck: () => {
+      setInterval(function() {
+        var now = Date.now();
+        var events = store.get('calTodayEvents') || [];
+        for (var i = 0; i < events.length; i++) {
+          var ev = events[i];
+          if (ev.startTime - 3600000 <= now && ev.startTime - 3600000 > now - 30000 && !ev._reminded1h) {
+            ev._reminded1h = true;
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+              new Notification('Round Tooit', { body: ev.title + ' in 1 hour' });
+            }
+          }
+          if (ev.startTime - 300000 <= now && ev.startTime - 300000 > now - 30000 && !ev._reminded5m) {
+            ev._reminded5m = true;
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+              new Notification('Round Tooit', { body: ev.title + ' in 5 minutes' });
+            }
+          }
+        }
+      }, 30000);
+    },
+    formatTime: (ts) => {
+      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+  }
+}
+</script>
+
+<style lang="less">
+@primary: #1565C0;
+@secondary: #00897B;
+@border: #e0e0e0;
+@muted: #757575;
+@error: #d32f2f;
+
+.calendar-section {
+  margin-bottom: 24px;
+
+  h3 { margin: 0 0 12px; font-size: 1.1em; }
+
+  .section-divider {
+    border: none;
+    border-top: 1px solid @border;
+    margin: 16px 0;
+  }
+
+  .sub-header {
+    font-size: 0.9em;
+    color: @muted;
+    font-weight: 600;
+    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .event-card {
+    background: white;
+    border: 1px solid @border;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+
+    .event-time {
+      color: @primary;
+      font-weight: 500;
+      min-width: 80px;
+      font-size: 0.9em;
+    }
+    .event-prefix {
+      color: @secondary;
+      font-weight: 600;
+      min-width: 100px;
+      font-size: 0.85em;
+    }
+    .event-title { font-weight: 500; }
+  }
+  .event-card:hover { border-color: @primary; }
+
+  .google-auth-prompt {
+    background: #fff3e0;
+    border: 1px solid #ffcc80;
+    border-radius: 8px;
+    padding: 16px;
+    text-align: center;
+
+    button {
+      margin-top: 8px;
+      padding: 10px 20px;
+      background: @primary;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.95em;
+    }
+    button:hover { background: #0D47A1; }
+  }
+
+  .day-group {
+    background: white;
+    border: 1px solid @border;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+
+    .day-label {
+      font-weight: 600;
+      color: @secondary;
+      margin-bottom: 6px;
+      font-size: 0.95em;
+    }
+
+    .period-line {
+      display: flex;
+      gap: 8px;
+      padding: 2px 0;
+      font-size: 0.9em;
+
+      .period-name {
+        color: @muted;
+        min-width: 70px;
+        font-style: italic;
+      }
+      .period-events {
+        color: #333;
+      }
+    }
+  }
+
+  .empty { color: @muted; padding: 12px 0; }
+  .error-msg { color: @error; margin-bottom: 8px; }
+}
+</style>
+
+<template>
+<div class="calendar-section">
+  <h3>Upcoming Events</h3>
+
+  <if condition="() => !store.get('googleToken')">
+    <div class="google-auth-prompt">
+      <p>Connect your Google Calendar to see events.</p>
+      <button @click="() => { store.get('googleAuthFn')?.() }">Connect Google</button>
+    </div>
+  </if>
+
+  <if condition="() => store.get('calLoading')">
+    <div class="rt-spinner">Loading calendar...</div>
+  </if>
+
+  <if condition="() => store.get('googleToken') && !store.get('calLoading')">
+    <if condition="() => (store.get('calTodayEvents') || []).length === 0">
+      <div class="empty">No events today</div>
+    </if>
+
+    <div for="() => store.get('calTodayEvents') || []">
+      <div class="event-card" @click="(e, ev) => openInGoogleCalendar(ev)" title="(m, ev) => ev.title + '\n' + formatTime(ev.startTime) + ' - ' + formatTime(ev.endTime) + (ev.description ? '\n' + ev.description : '') + (ev.location ? '\n' + ev.location : '')">
+        <span class="event-time" textContent="(m, ev) => formatTime(ev.startTime)"></span>
+        <span class="event-title" textContent="(m, ev) => ev.title"></span>
+      </div>
+    </div>
+
+    <if condition="() => (store.get('calUpcomingEvents') || []).length > 0">
+        <hr class="section-divider" />
+        <div for="() => store.get('calUpcomingEvents') || []">
+          <div class="day-group">
+            <div class="day-label" textContent="(m, day) => day.label"></div>
+            <if condition="(m, day) => day.morning.length > 0">
+              <div class="period-line">
+                <span class="period-name">morning:</span>
+                <span class="period-events" textContent="(m, day) => day.morning.join(', ')"></span>
+              </div>
+            </if>
+            <if condition="(m, day) => day.afternoon.length > 0">
+              <div class="period-line">
+                <span class="period-name">afternoon:</span>
+                <span class="period-events" textContent="(m, day) => day.afternoon.join(', ')"></span>
+              </div>
+            </if>
+            <if condition="(m, day) => day.evening.length > 0">
+              <div class="period-line">
+                <span class="period-name">evening:</span>
+                <span class="period-events" textContent="(m, day) => day.evening.join(', ')"></span>
+              </div>
+            </if>
+          </div>
+        </div>
+      </if>
+  </if>
+</div>
+</template>

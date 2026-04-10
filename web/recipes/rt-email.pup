@@ -1,0 +1,126 @@
+<script>
+{
+  title: 'Email',
+  vars: {
+    error: null
+  },
+  methods: {
+    openInGmail: (email) => {
+      window.open('https://mail.google.com/mail/u/0/#inbox/' + email.id, '_blank');
+    },
+    markDone: async (email) => {
+      var app = store.get('app');
+      if (!app) return;
+      try {
+        await app.markEmailDone({ gmail_id: email.id });
+        // Remove from displayed list
+        var list = store.get('emailList') || [];
+        var updated = list.filter(function(em) { return em.id !== email.id; });
+        store.set('emailList', updated);
+      } catch (err) {
+        $error = err.message;
+      }
+    }
+  }
+}
+</script>
+
+<style lang="less">
+@primary: #1565C0;
+@secondary: #00897B;
+@border: #e0e0e0;
+@muted: #757575;
+@error: #d32f2f;
+
+.email-section {
+  margin-bottom: 24px;
+
+  h3 { margin: 0 0 12px; font-size: 1.1em; }
+
+  .email-card {
+    background: white;
+    border: 1px solid @border;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+
+    .email-content {
+      flex: 1;
+      cursor: pointer;
+
+      .email-sender { font-weight: 600; font-size: 0.95em; }
+      .email-subject { font-weight: 500; margin-top: 2px; }
+      .email-snippet { color: @muted; font-size: 0.85em; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .email-unread { display: inline-block; width: 8px; height: 8px; background: @primary; border-radius: 50%; margin-right: 4px; vertical-align: middle; }
+    }
+
+    .email-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-top: 2px;
+
+      button {
+        padding: 4px 10px;
+        border: 1px solid @border;
+        border-radius: 4px;
+        font-size: 0.8em;
+        cursor: pointer;
+        background: white;
+        color: @muted;
+      }
+      button:hover { background: #f5f5f5; }
+      .btn-done { color: @secondary; border-color: @secondary; }
+      .btn-done:hover { background: #e0f2f1; }
+    }
+  }
+
+  .empty { color: @muted; text-align: center; padding: 20px; }
+  .error-msg { color: @error; margin-bottom: 8px; }
+}
+</style>
+
+<template>
+<div class="email-section">
+  <h3>Messages</h3>
+
+  <if condition="() => $error">
+    <div class="error-msg">$error</div>
+  </if>
+
+  <if condition="() => !store.get('googleToken')">
+    <div class="empty">Connect Google to see emails from your contacts.</div>
+  </if>
+
+  <if condition="() => store.get('emailLoading')">
+    <div class="rt-spinner">Loading messages...</div>
+  </if>
+
+  <if condition="() => store.get('googleToken') && !store.get('emailLoading')">
+    <if condition="() => (store.get('emailList') || []).length === 0">
+      <div class="empty">No messages from known contacts</div>
+    </if>
+
+    <div for="() => store.get('emailList') || []">
+      <div class="email-card">
+        <div class="email-content" @click="(e, em) => openInGmail(em)" title="(m, em) => (em.senderName || em.senderEmail) + '\n' + em.subject + '\n\n' + em.snippet">
+          <div class="email-sender">
+            <if condition="(m, em) => em.isUnread">
+              <span class="email-unread"></span>
+            </if>
+            <span textContent="(m, em) => em.senderName || em.senderEmail"></span>
+          </div>
+          <div class="email-subject" textContent="(m, em) => em.subject"></div>
+          <div class="email-snippet" textContent="(m, em) => em.snippet"></div>
+        </div>
+        <div class="email-actions">
+          <button class="btn-done" @click="(e, em) => markDone(em)">Done</button>
+        </div>
+      </div>
+    </div>
+  </if>
+</div>
+</template>

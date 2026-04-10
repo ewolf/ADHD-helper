@@ -1,0 +1,398 @@
+<script>
+{
+  title: 'Round Tooit',
+  import: {
+    layout: '/recipes/rt-layout',
+    calendar: '/recipes/rt-calendar',
+    email: '/recipes/rt-email',
+    tasks: '/recipes/rt-tasks',
+    notes: '/recipes/rt-notes'
+  },
+  include-js: ['../webroot/js/yapi-provider.js', '../webroot/js/rt-gmail.js', '../webroot/js/rt-gcal.js'],
+  import-js: ['https://accounts.google.com/gsi/client'],
+  initial_store: { user: null, app: null, googleToken: null, googleAuthFn: null, adhdLabelId: null, calTodayEvents: [], calUpcomingEvents: [], emailList: [], doneEmailIds: {}, calLoading: false, emailLoading: false },
+  vars: {
+    provider: null,
+    view: 'dashboard',
+    loginHandle: '',
+    loginPassword: '',
+    showSignup: false,
+    error: null,
+    loading: false,
+    googleClientId: '351614182088-50ktiss6b2vpfraerfbhhfmrj89vv370.apps.googleusercontent.com',
+    googleConnected: false
+  },
+  lifecycle: {
+    onMount: () => {
+      console.log('[RT] onMount starting');
+      var provider = new AppProvider('/yapi');
+      $provider = provider;
+
+      provider.connect('roundtooit').then(function(app) {
+        console.log('[RT] YAPI connected');
+        store.set('app', app);
+        if (provider.isLoggedIn()) {
+          store.set('user', provider.getUser());
+          console.log('[RT] User restored from session');
+        }
+        // Restore Google token AFTER user is set so calendar/email components exist
+        var savedToken = localStorage.getItem('rt_google_token');
+        console.log('[RT] Saved google token:', savedToken ? 'yes' : 'none');
+        if (savedToken) {
+          // Small delay to let child components mount after user is set
+          setTimeout(function() {
+            store.set('googleToken', savedToken);
+            $googleConnected = true;
+            console.log('[RT] Google token restored, loading data');
+            loadGoogleData();
+          }, 100);
+        }
+      }).catch(function(err) {
+        console.error('[RT] Connect failed:', err);
+        if (provider.isLoggedIn()) provider.logout();
+      });
+
+      store.set('googleAuthFn', function() {
+        console.log('[RT] googleAuthFn called');
+        initGoogleAuth();
+      });
+    }
+  },
+  methods: {
+    doLogin: async () => {
+      $error = null;
+      $loading = true;
+
+      const result = await $provider.login({
+        handle: $loginHandle,
+        password: $loginPassword
+      });
+
+      $loading = false;
+      $loginPassword = '';
+
+      if (result.ok) {
+        const app = await $provider.connect('roundtooit');
+        store.set('app', app);
+        store.set('user', $provider.getUser());
+        $view = 'dashboard';
+      } else {
+        $error = result.error;
+      }
+    },
+    doSignup: async () => {
+      $error = null;
+      $loading = true;
+
+      const result = await $provider.createUser({
+        handle: $loginHandle,
+        password: $loginPassword
+      });
+
+      $loading = false;
+
+      if (result.ok) {
+        const app = await $provider.connect('roundtooit');
+        store.set('app', app);
+        store.set('user', $provider.getUser());
+        $view = 'dashboard';
+      } else {
+        $error = result.error;
+      }
+    },
+    doLogout: async () => {
+      await $provider.logout();
+      store.set('user', null);
+      store.set('app', null);
+      store.set('googleToken', null);
+      localStorage.removeItem('rt_google_token');
+      $googleConnected = false;
+      $view = 'dashboard';
+    },
+    goTo: (dest) => {
+      $view = dest;
+    },
+    initGoogleAuth: () => {
+      console.log('[RT] initGoogleAuth called');
+      if (typeof google === 'undefined' || !google.accounts) {
+        console.error('[RT] Google library not loaded');
+        $error = 'Google auth library not loaded';
+        return;
+      }
+      var tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: $googleClientId,
+        scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.modify',
+        callback: function(response) {
+          console.log('[RT] Google OAuth callback:', response);
+          if (response.access_token) {
+            console.log('[RT] Got access token, saving and loading data');
+            localStorage.setItem('rt_google_token', response.access_token);
+            store.set('googleToken', response.access_token);
+            $googleConnected = true;
+            loadGoogleData();
+          } else if (response.error) {
+            console.error('[RT] Google OAuth error:', response.error);
+            $error = 'Google auth failed: ' + response.error;
+          }
+        }
+      });
+      tokenClient.requestAccessToken();
+    },
+    loadGoogleData: async () => {
+      var token = store.get('googleToken');
+      if (!token) return;
+      console.log('[RT] loadGoogleData starting');
+
+      // Test if token is still valid
+      try {
+        var testResp = await fetch(
+          'https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1',
+          { headers: { Authorization: 'Bearer ' + token } }
+        );
+        if (testResp.status === 401) {
+          console.log('[RT] Token expired, refreshing');
+          localStorage.removeItem('rt_google_token');
+          $googleConnected = false;
+          // Trigger fresh auth — user will need to click Connect Google
+          // or do silent refresh if possible
+          if (typeof google !== 'undefined' && google.accounts) {
+            var gotNew = false;
+            var tokenClient = google.accounts.oauth2.initTokenClient({
+              client_id: $googleClientId,
+              scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.modify',
+              callback: function(response) {
+                if (response.access_token) {
+                  console.log('[RT] Got fresh token');
+                  localStorage.setItem('rt_google_token', response.access_token);
+                  store.set('googleToken', response.access_token);
+                  $googleConnected = true;
+                  gotNew = true;
+                  // Retry load with new token
+                  _rtDoGoogleLoad(response.access_token);
+                }
+              }
+            });
+            tokenClient.requestAccessToken({ prompt: '' });
+          }
+          return;
+        }
+      } catch (err) {
+        console.error('[RT] Token test failed:', err);
+      }
+
+      _rtDoGoogleLoad(token);
+    },
+    silentGoogleRefresh: () => {
+      if (typeof google === 'undefined' || !google.accounts) return;
+      var tokenClient = google.accounts.oauth2.initTokenClient({
+        client_id: $googleClientId,
+        scope: 'https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.modify',
+        callback: function(response) {
+          if (response.access_token) {
+            localStorage.setItem('rt_google_token', response.access_token);
+            store.set('googleToken', response.access_token);
+            $googleConnected = true;
+          }
+        }
+      });
+      tokenClient.requestAccessToken({ prompt: '' });
+    }
+  }
+}
+</script>
+
+<style lang="less">
+@primary: #1565C0;
+@secondary: #00897B;
+@border: #e0e0e0;
+@muted: #757575;
+@error: #d32f2f;
+
+.login-page {
+  max-width: 400px;
+  margin: 60px auto;
+  padding: 0 20px;
+
+  .login-title {
+    text-align: center;
+    margin-bottom: 30px;
+
+    h2 { color: @primary; margin-bottom: 4px; }
+    p { color: @muted; }
+  }
+
+  .auth-form {
+    background: white;
+    border: 1px solid @border;
+    border-radius: 8px;
+    padding: 24px;
+
+    input {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid @border;
+      border-radius: 4px;
+      font-size: 1em;
+      margin-bottom: 12px;
+    }
+    input:focus { outline: none; border-color: @primary; }
+    input::placeholder { color: #bbb; }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      background: @primary;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-size: 1em;
+      cursor: pointer;
+    }
+    button:hover { background: #0D47A1; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+  }
+
+  .toggle-auth {
+    text-align: center;
+    margin-top: 16px;
+    color: @muted;
+
+    a { color: @primary; cursor: pointer; }
+  }
+
+  .error-msg {
+    background: #fde8e8;
+    color: @error;
+    padding: 10px;
+    border-radius: 4px;
+    margin-bottom: 12px;
+    text-align: center;
+  }
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+
+  @media (max-width: 700px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.full-width {
+  grid-column: 1 / -1;
+}
+
+.google-setup {
+  background: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  font-size: 0.9em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+
+  button {
+    padding: 6px 14px;
+    background: @primary;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.85em;
+  }
+  button:hover { background: #0D47A1; }
+}
+</style>
+
+<template>
+<if condition="() => !store.get('user')">
+  <div class="login-page">
+    <div class="login-title">
+      <h2>Round Tooit</h2>
+      <p>Stay aware of your day</p>
+    </div>
+
+    <if condition="() => $error">
+      <div class="error-msg">${$error}</div>
+    </if>
+
+    <div class="auth-form">
+      <if condition="() => !$showSignup">
+        <input type="text" placeholder="Username"
+               value="$loginHandle"
+               @input="(e) => { $loginHandle = e.target.value }"
+               @keydown="(e) => { if (e.key === 'Enter') e.target.nextElementSibling.focus() }" />
+        <input type="password" placeholder="Password"
+               value="$loginPassword"
+               @input="(e) => { $loginPassword = e.target.value }"
+               @keydown="(e) => { if (e.key === 'Enter') doLogin() }" />
+        <button @click="doLogin()" disabled="() => $loading">Sign In</button>
+      </if>
+
+      <if condition="() => $showSignup">
+        <input type="text" placeholder="Choose a username"
+               value="$loginHandle"
+               @input="(e) => { $loginHandle = e.target.value }" />
+        <input type="password" placeholder="Choose a password (min 8 chars)"
+               value="$loginPassword"
+               @input="(e) => { $loginPassword = e.target.value }"
+               @keydown="(e) => { if (e.key === 'Enter') doSignup() }" />
+        <button @click="doSignup()" disabled="() => $loading">Create Account</button>
+      </if>
+    </div>
+
+    <div class="toggle-auth">
+      <if condition="() => !$showSignup">
+        <span>No account? <a @click="$showSignup = true">Sign up</a></span>
+      </if>
+      <if condition="() => $showSignup">
+        <span>Have an account? <a @click="$showSignup = false">Sign in</a></span>
+      </if>
+    </div>
+  </div>
+</if>
+
+<if condition="() => store.get('user')">
+  <layout>
+    <a slot="nav" class="() => $view === 'dashboard' ? 'active' : ''" @click="goTo('dashboard')">Dashboard</a>
+    <a slot="nav" class="() => $view === 'tasks' ? 'active' : ''" @click="goTo('tasks')">Tasks</a>
+    <a slot="nav" class="() => $view === 'notes' ? 'active' : ''" @click="goTo('notes')">Notes</a>
+    <a slot="nav" @click="doLogout()">Logout</a>
+
+    <if condition="() => !$googleConnected">
+      <div class="google-setup">
+        <span>Connect Google for Calendar &amp; Email</span>
+        <button @click="initGoogleAuth()">Connect Google</button>
+      </div>
+    </if>
+
+    <if condition="() => $view === 'dashboard'">
+      <div class="dashboard-grid">
+        <div>
+          <calendar />
+        </div>
+        <div>
+          <email />
+          <tasks />
+        </div>
+      </div>
+    </if>
+
+    <if condition="() => $view === 'tasks'">
+      <tasks />
+    </if>
+
+    <if condition="() => $view === 'notes'">
+      <notes />
+    </if>
+
+    <div style="text-align:center;color:#bbb;font-size:0.75em;margin-top:40px;">
+      Build: 2026-04-09 A | Token: ${store.get('googleToken') ? 'yes (' + store.get('googleToken').substring(0,8) + '...)' : 'none'}
+    </div>
+  </layout>
+</if>
+</template>

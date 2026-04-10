@@ -1,0 +1,18 @@
+# Android
+app/build/
+app/.gradle/
+app/local.properties
+*.apk
+*.aab
+
+# YAPI server
+server/data/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

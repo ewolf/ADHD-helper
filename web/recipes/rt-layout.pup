@@ -1,0 +1,115 @@
+<script>
+{
+  title: 'Round Tooit Layout',
+  vars: { pageTitle: 'Round Tooit' }
+}
+</script>
+
+<style lang="less">
+@primary: #1565C0;
+@secondary: #00897B;
+@surface: #f5f5f5;
+@surfaceDark: #fff;
+@bg: #fafafa;
+@text: #212121;
+@muted: #757575;
+@error: #d32f2f;
+@border: #e0e0e0;
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: @bg;
+  color: @text;
+  min-height: 100vh;
+}
+
+a { color: @primary; text-decoration: none; cursor: pointer; }
+a:hover { text-decoration: underline; }
+
+@keyframes rt-spin {
+  to { transform: rotate(360deg); }
+}
+
+.rt-spinner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 0;
+  color: @muted;
+  font-size: 0.9em;
+}
+
+.rt-spinner::before {
+  content: '';
+  width: 20px;
+  height: 20px;
+  border: 3px solid @border;
+  border-top-color: @primary;
+  border-radius: 50%;
+  animation: rt-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+.rt-layout {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 20px 40px;
+}
+
+header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 0;
+  border-bottom: 2px solid @primary;
+  margin-bottom: 24px;
+
+  h1 {
+    margin: 0;
+    font-size: 1.6em;
+    color: @primary;
+    letter-spacing: 1px;
+  }
+
+  nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    a, button {
+      background: @primary;
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85em;
+      text-decoration: none;
+    }
+  }
+}
+header nav a:hover, header nav button:hover {
+  background: #0D47A1;
+  text-decoration: none;
+}
+header nav a.active {
+  background: @secondary;
+}
+</style>
+
+<template>
+<div class="rt-layout">
+  <header>
+    <h1>Round Tooit</h1>
+    <nav>
+      <slot name="nav"/>
+    </nav>
+  </header>
+  <main>
+    <slot/>
+  </main>
+</div>
+</template>

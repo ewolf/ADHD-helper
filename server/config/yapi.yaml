@@ -1,0 +1,22 @@
+root_package: RoundTooit
+
+mode: debug
+
+port: 5001
+
+www_dir: /devel/proj/ADHD_helper/server
+
+lib_paths:
+  - lib
+  - /devel/proj/ADHD_helper/server/lib
+
+db:
+  type: SQLite
+  data_dir: /devel/proj/ADHD_helper/server/data
+
+# For production on madyote.com with MariaDB:
+# db:
+#   type: MariaDB
+#   dbname: roundtooit
+#   username: roundtooit
+#   password: <secret>

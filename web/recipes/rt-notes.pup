@@ -1,0 +1,293 @@
+<script>
+{
+  title: 'Notes',
+  vars: {
+    notes: [],
+    searchQuery: '',
+    newText: '',
+    showAdd: false,
+    editingNote: null,
+    editText: '',
+    loading: false,
+    error: null
+  },
+  lifecycle: {
+    onMount: () => {
+      loadNotes();
+    }
+  },
+  methods: {
+    loadNotes: async () => {
+      const app = store.get('app');
+      if (!app) return;
+      $loading = true;
+      try {
+        let result;
+        if ($searchQuery.trim()) {
+          result = await app.searchNotes({ query: $searchQuery.trim(), limit: 50 });
+        } else {
+          result = await app.listNotes({ limit: 50 });
+        }
+        $notes = result.notes || [];
+      } catch (err) {
+        $error = err.message;
+      }
+      $loading = false;
+    },
+    doSearch: () => {
+      loadNotes();
+    },
+    addNote: async () => {
+      if (!$newText.trim()) return;
+      const app = store.get('app');
+      if (!app) return;
+      try {
+        await app.addNote({ text: $newText.trim() });
+        $newText = '';
+        $showAdd = false;
+        await loadNotes();
+      } catch (err) {
+        $error = err.message;
+      }
+    },
+    startEdit: (note) => {
+      $editingNote = note;
+      $editText = note.text;
+    },
+    saveEdit: async () => {
+      if (!$editText.trim() || !$editingNote) return;
+      const app = store.get('app');
+      if (!app) return;
+      try {
+        await app.editNote({ note: $editingNote, text: $editText.trim() });
+        $editingNote = null;
+        $editText = '';
+        await loadNotes();
+      } catch (err) {
+        $error = err.message;
+      }
+    },
+    cancelEdit: () => {
+      $editingNote = null;
+      $editText = '';
+    },
+    deleteNote: async (note) => {
+      const app = store.get('app');
+      if (!app) return;
+      try {
+        await app.deleteNote({ note: note });
+        await loadNotes();
+      } catch (err) {
+        $error = err.message;
+      }
+    }
+  }
+}
+</script>
+
+<style lang="less">
+@primary: #1565C0;
+@secondary: #00897B;
+@border: #e0e0e0;
+@muted: #757575;
+@error: #d32f2f;
+
+.notes-section {
+  margin-bottom: 24px;
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+
+    h3 { margin: 0; font-size: 1.1em; }
+
+    button {
+      background: none;
+      border: 1px solid @border;
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85em;
+      color: @primary;
+    }
+    button:hover { background: #e3f2fd; }
+  }
+
+  .search-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+
+    input {
+      flex: 1;
+      padding: 10px;
+      border: 1px solid @border;
+      border-radius: 4px;
+      font-size: 0.95em;
+    }
+    input:focus { outline: none; border-color: @primary; }
+
+    button {
+      padding: 10px 16px;
+      background: @primary;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    button:hover { background: #0D47A1; }
+  }
+
+  .add-form, .edit-form {
+    background: white;
+    border: 1px solid @border;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+
+    textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid @border;
+      border-radius: 4px;
+      font-size: 0.95em;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 80px;
+    }
+    textarea:focus { outline: none; border-color: @primary; }
+
+    .form-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 8px;
+
+      button {
+        padding: 8px 16px;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 0.9em;
+      }
+      .btn-save { background: @primary; color: white; }
+      .btn-save:hover { background: #0D47A1; }
+      .btn-save:disabled { opacity: 0.5; }
+      .btn-cancel { background: #e0e0e0; }
+      .btn-cancel:hover { background: #bdbdbd; }
+    }
+  }
+
+  .edit-form { background: #e3f2fd; }
+
+  .note-card {
+    background: white;
+    border: 1px solid @border;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+
+    .note-text {
+      white-space: pre-wrap;
+      line-height: 1.6;
+      margin-bottom: 8px;
+    }
+
+    .note-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+
+      .note-date { color: @muted; font-size: 0.8em; }
+
+      .note-actions {
+        display: flex;
+        gap: 4px;
+
+        button {
+          background: none;
+          border: 1px solid @border;
+          padding: 4px 10px;
+          border-radius: 4px;
+          cursor: pointer;
+          font-size: 0.8em;
+          color: @muted;
+        }
+        button:hover { background: #f5f5f5; color: @primary; }
+        .btn-delete:hover { color: @error; }
+      }
+    }
+  }
+
+  .empty { color: @muted; text-align: center; padding: 20px; }
+  .error-msg { color: @error; margin-bottom: 8px; }
+}
+</style>
+
+<template>
+<div class="notes-section">
+  <div class="section-header">
+    <h3>Notes</h3>
+    <button @click="$showAdd = !$showAdd">
+      ${$showAdd ? 'Cancel' : '+ Add'}
+    </button>
+  </div>
+
+  <if condition="() => $error">
+    <div class="error-msg">$error</div>
+  </if>
+
+  <div class="search-bar">
+    <input type="text" placeholder="Search notes..."
+           value="$searchQuery"
+           @input="(e) => { $searchQuery = e.target.value }"
+           @keydown="(e) => { if (e.key === 'Enter') doSearch() }" />
+    <button @click="doSearch()">Search</button>
+  </div>
+
+  <if condition="() => $showAdd">
+    <div class="add-form">
+      <textarea placeholder="Write a note..."
+                @input="(e) => { $newText = e.target.value }"></textarea>
+      <div class="form-actions">
+        <button class="btn-save" @click="addNote()"
+                disabled="() => !$newText.trim()">Save</button>
+        <button class="btn-cancel" @click="$showAdd = false">Cancel</button>
+      </div>
+    </div>
+  </if>
+
+  <if condition="() => $editingNote">
+    <div class="edit-form">
+      <strong>Editing Note</strong>
+      <textarea value="$editText"
+                @input="(e) => { $editText = e.target.value }"></textarea>
+      <div class="form-actions">
+        <button class="btn-save" @click="saveEdit()"
+                disabled="() => !$editText.trim()">Save</button>
+        <button class="btn-cancel" @click="cancelEdit()">Cancel</button>
+      </div>
+    </div>
+  </if>
+
+  <if condition="() => $notes.length === 0 && !$loading">
+    <div class="empty">
+      ${$searchQuery ? 'No notes match your search' : 'No notes yet'}
+    </div>
+  </if>
+
+  <div for="() => $notes">
+    <div class="note-card">
+      <div class="note-text" textContent="(m, n) => n.text"></div>
+      <div class="note-footer">
+        <span class="note-date" textContent="(m, n) => n.created ? new Date(n.created).toLocaleString() : ''"></span>
+        <div class="note-actions">
+          <button @click="(e, n) => startEdit(n)">Edit</button>
+          <button class="btn-delete" @click="(e, n) => deleteNote(n)">Delete</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</template>
