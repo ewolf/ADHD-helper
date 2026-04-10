@@ -4,15 +4,15 @@ mode: debug
 
 port: 5001
 
-www_dir: /devel/proj/ADHD_helper/server
+www_dir: /home/coyo/yoteproj/ADHD_helper/server
 
 lib_paths:
   - lib
-  - /devel/proj/ADHD_helper/server/lib
+  - /home/coyo/yoteproj/ADHD_helper/server/lib
 
 db:
   type: SQLite
-  data_dir: /devel/proj/ADHD_helper/server/data
+  data_dir: /home/coyo/yoteproj/ADHD_helper/server/data
 
 # For production on madyote.com with MariaDB:
 # db:

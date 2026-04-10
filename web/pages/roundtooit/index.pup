@@ -1,6 +1,14 @@
 <script>
 {
   title: 'Round Tooit',
+  head: [
+    '<link rel="manifest" href="/roundtooit/manifest.json">',
+    '<meta name="theme-color" content="#1565C0">',
+    '<meta name="mobile-web-app-capable" content="yes">',
+    '<meta name="apple-mobile-web-app-capable" content="yes">',
+    '<meta name="apple-mobile-web-app-title" content="Round Tooit">',
+    '<link rel="apple-touch-icon" href="/roundtooit/icons/icon-192.png">'
+  ],
   import: {
     layout: '/recipes/rt-layout',
     calendar: '/recipes/rt-calendar',
@@ -56,6 +64,13 @@
         console.log('[RT] googleAuthFn called');
         initGoogleAuth();
       });
+
+      // Register the PWA service worker (installability / offline fallback).
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/roundtooit/service-worker.js')
+          .then(function() { console.log('[RT] service worker registered'); })
+          .catch(function(e) { console.warn('[RT] SW register failed', e); });
+      }
     }
   },
   methods: {
@@ -379,8 +394,8 @@
           <calendar />
         </div>
         <div>
-          <email />
           <tasks />
+          <email />
         </div>
       </div>
     </if>

@@ -251,7 +251,7 @@
       </div>
       <div class="task-actions">
         <button class="btn-complete" @click="(e, t) => completeTask(t)">Done</button>
-        <button class="btn-delay" @click="(e, t) => delayTask(t)">Delay</button>
+        <button class="btn-delay" @click="(e, t) => delayTask(t)">Show an other</button>
       </div>
     </div>
   </div>
