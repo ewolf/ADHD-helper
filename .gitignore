@@ -1,10 +1,3 @@
-# Android
-app/build/
-app/.gradle/
-app/local.properties
-*.apk
-*.aab
-
 # YAPI server
 server/data/
 
