@@ -1,10 +1,9 @@
 # Round Tooit
 
-An Android app and YAPI server designed to help ADHD individuals maintain awareness of their daily life.
+A web app and YAPI server designed to help ADHD individuals maintain awareness of their daily life.
 
 ## Core Components
 
-- **Android app** — Kotlin / Jetpack Compose, using OkHttp + kotlinx.serialization for YAPI communication
 - **Web app** — Spiderpup (YAML-to-HTML/JS) frontend, served by the same YAPI server as madyote via symlinks
 - **YAPI server** — Perl JSON-RPC backend hosted at `madyote.com`
 
@@ -46,39 +45,10 @@ Login is required to use the app. Currently single-user only.
 - Task description: no size limit
 - No due dates — priority is determined by queue position only
 
-### Voice & Reminders
-- On-device speech recognition for voice control
-- Reminders at 1 hour and 5 minutes before calendar events, scheduled locally via AlarmManager
-- Default reminder: voice announcement of event title to all active audio channels + status bar notification
-- Tapping an upcoming event opens its description, where reminders can be:
-  - Disabled entirely
-  - Customized to chime only, buzz only, or both (instead of voice)
-- Honors DND and silent mode — no audio override
-
 ### Notes
 - Free-form plain text notes, no length limit
 - Stored as a sequential list
 - Searchable
-
-### Offline & Sync
-- App works offline with locally cached data
-- Syncs with server every 10 minutes
-
----
-
-## App Installation
-
-### Prerequisites
-- Android device running Android 8.0 (API 26) or higher
-- Microphone permission (for voice control)
-- Internet access
-
-### Install
-1. Download the latest APK from the releases page
-2. On your device, enable **Settings > Security > Install from unknown sources** (if not already enabled)
-3. Open the APK and follow the install prompts
-4. Launch **Round Tooit** and log in with your credentials
-5. Grant permissions when prompted (microphone, notifications, calendar)
 
 ---
 
@@ -88,7 +58,7 @@ Login is required to use the app. Currently single-user only.
 - A server with a public-facing domain (configured for `madyote.com`)
 - Perl (with YAPI framework and dependencies installed — see [yapi-server](https://github.com/your-repo/yapi-server))
 - MariaDB **or** SQLite (configurable)
-- Google OAuth is handled by the Android app directly (not the server)
+- Google OAuth is handled by the web app directly in the browser (not the server)
 
 ### Install
 
