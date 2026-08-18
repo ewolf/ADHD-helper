@@ -24,4 +24,13 @@ class EmailRepository @Inject constructor(
             yapiClient.call("markEmailDone", mapOf("gmail_id" to messageId))
         } catch (_: Exception) { }
     }
+
+    suspend fun markAllDone() {
+        val ids = cachedEmailDao.getActiveEmailIds()
+        if (ids.isEmpty()) return
+        cachedEmailDao.markAllDone()
+        try {
+            yapiClient.call("markEmailDone", mapOf("gmail_ids" to ids))
+        } catch (_: Exception) { }
+    }
 }

@@ -15,6 +15,12 @@ interface CachedEmailDao {
     @Query("UPDATE cached_emails SET isDone = 1 WHERE gmailMessageId = :messageId")
     suspend fun markDone(messageId: String)
 
+    @Query("SELECT gmailMessageId FROM cached_emails WHERE isDone = 0")
+    suspend fun getActiveEmailIds(): List<String>
+
+    @Query("UPDATE cached_emails SET isDone = 1 WHERE isDone = 0")
+    suspend fun markAllDone()
+
     @Query("SELECT gmailMessageId FROM cached_emails WHERE isDone = 1")
     suspend fun getDoneEmailIds(): List<String>
 

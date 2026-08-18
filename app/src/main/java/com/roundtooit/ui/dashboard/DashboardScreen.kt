@@ -101,7 +101,11 @@ fun DashboardScreen(
             // --- Unread Emails ---
             item {
                 Spacer(modifier = Modifier.height(8.dp))
-                SectionHeader("Messages")
+                SectionHeader(
+                    "Messages",
+                    action = if (uiState.unreadEmails.isNotEmpty()) "Mark all read" else null,
+                    onAction = if (uiState.unreadEmails.isNotEmpty()) viewModel::markAllEmailsRead else null,
+                )
             }
 
             if (uiState.unreadEmails.isEmpty()) {

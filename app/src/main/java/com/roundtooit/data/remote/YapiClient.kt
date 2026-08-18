@@ -159,6 +159,7 @@ class YapiClient @Inject constructor(
                         is Number -> put(key, "v$value")
                         is Boolean -> put(key, "v${if (value) 1 else 0}")
                         is YapiObject -> put(key, "r${value.objId}")
+                        is List<*> -> putJsonArray(key) { value.forEach { add("v$it") } }
                         null -> put(key, JsonNull)
                         else -> put(key, "v$value")
                     }

@@ -2,7 +2,8 @@
 {
   title: 'Email',
   vars: {
-    error: null
+    error: null,
+    markingAllRead: false
   },
   methods: {
     openInGmail: (email) => {
@@ -21,6 +22,21 @@
       } catch (err) {
         $error = err.message;
       }
+    },
+    markAllRead: async () => {
+      var app = store.get('app');
+      if (!app) return;
+      var list = store.get('emailList') || [];
+      if (list.length === 0) return;
+      $markingAllRead = true;
+      try {
+        await app.markEmailDone({ gmail_ids: list.map(function(em) { return em.id; }) });
+        store.set('emailList', []);
+        _rtSetEmailCache([]);
+      } catch (err) {
+        $error = err.message;
+      }
+      $markingAllRead = false;
     }
   }
 }
@@ -36,7 +52,26 @@
 .email-section {
   margin-bottom: 24px;
 
-  h3 { margin: 0 0 12px; font-size: 1.1em; }
+  h3 { margin: 0; font-size: 1.1em; }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+
+    button {
+      background: none;
+      border: 1px solid @border;
+      padding: 4px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85em;
+      color: @primary;
+    }
+    button:hover { background: #e3f2fd; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+  }
 
   .email-card {
     background: white;
@@ -86,7 +121,14 @@
 
 <template>
 <div class="email-section">
-  <h3>Messages</h3>
+  <div class="section-header">
+    <h3>Messages</h3>
+    <if condition="() => store.get('googleToken') && (store.get('emailList') || []).length > 0">
+      <button @click="markAllRead()" disabled="() => $markingAllRead">
+        ${$markingAllRead ? 'Marking...' : 'Mark all read'}
+      </button>
+    </if>
+  </div>
 
   <if condition="() => $error">
     <div class="error-msg">$error</div>

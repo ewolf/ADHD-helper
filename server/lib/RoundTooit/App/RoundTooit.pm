@@ -405,15 +405,22 @@ sub updatePrefs {
 sub markEmailDone {
     my ($self, $args, $session) = @_;
     my $user = $session->get_user;
-    my $gmail_id = $args->{gmail_id};
 
-    return 0, "gmail_id is required" unless defined $gmail_id && length($gmail_id);
+    my @ids;
+    if ( ref $args->{gmail_ids} eq 'ARRAY' ) {
+        @ids = grep { defined($_) && length($_) } @{ $args->{gmail_ids} };
+    }
+    elsif ( defined $args->{gmail_id} && length($args->{gmail_id}) ) {
+        @ids = ( $args->{gmail_id} );
+    }
+
+    return 0, "gmail_id or gmail_ids is required" unless @ids;
 
     my $done = $self->_user_done_emails($user);
-    $done->{$gmail_id} = '1';
+    $done->{$_} = '1' for @ids;
 
     $self->_bump_version;
-    return 1, { done => 1 };
+    return 1, { done => scalar(@ids) };
 }
 
 sub getDoneEmails {

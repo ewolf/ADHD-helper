@@ -82,6 +82,12 @@ class DashboardViewModel @Inject constructor(
         }
     }
 
+    fun markAllEmailsRead() {
+        viewModelScope.launch {
+            emailRepository.markAllDone()
+        }
+    }
+
     private fun groupByDay(events: List<CachedEventEntity>): List<UpcomingDayGroup> {
         val now = Calendar.getInstance()
         now.set(Calendar.HOUR_OF_DAY, 0)
